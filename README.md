@@ -2,7 +2,7 @@
 
 Reusable `DataManager` and `ConfigManager` for Python data pipelines.
 
-> **Important:** This is not a standalone application. It is built to be imported as a library.
+> **Important:** This is not a standalone application. This code is built to be imported as a library.
 
 ---
 
