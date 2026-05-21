@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Conda & Envs
+.venv/
+env/
+venv/
+
+# Package build artifacts
+*.egg-info/
+
+# OS / IDE
+.DS_Store
+.vscode
+
+# Pytest coverage reports
+htmlcov/
+.coverage

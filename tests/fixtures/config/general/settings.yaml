@@ -1,0 +1,6 @@
+pipeline:
+  log_level: INFO
+  timeout: 30
+database:
+  port: 5432
+  host: localhost

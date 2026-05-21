@@ -1,0 +1,4 @@
+pipeline:
+  currency: EUR
+database:
+  host: fr-db.internal.com

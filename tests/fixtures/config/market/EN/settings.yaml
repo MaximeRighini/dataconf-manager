@@ -1,0 +1,4 @@
+pipeline:
+  currency: GBP
+database:
+  host: en-db.internal.com
