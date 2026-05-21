@@ -1,0 +1,4 @@
+pipeline:
+  log_level: WARNING
+database:
+  host: prod-{market}-db.internal.com  # anchor point test
