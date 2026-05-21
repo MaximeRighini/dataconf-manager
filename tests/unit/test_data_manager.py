@@ -1,10 +1,11 @@
 import logging
+from pathlib import Path
 
 import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 
-from data_manager.data_manager import DataManager
+from dataconf_manager import DataManager
 
 
 @pytest.fixture
@@ -28,7 +29,7 @@ def sample_df() -> pl.DataFrame:
     ids=["csv", "parquet", "json"],
 )
 def test_read_write_round_trip(
-    tmp_path, dm: DataManager, sample_df: pl.DataFrame, filename: str
+    tmp_path: Path, dm: DataManager, sample_df: pl.DataFrame, filename: str
 ) -> None:
     path = tmp_path / filename
     dm.write(sample_df, path)
@@ -36,7 +37,7 @@ def test_read_write_round_trip(
 
 
 def test_read_write_round_trip_xlsx(
-    tmp_path, dm: DataManager, sample_df: pl.DataFrame
+    tmp_path: Path, dm: DataManager, sample_df: pl.DataFrame
 ) -> None:
     # Excel is tested separately as it requires sheet_name kwarg support
     path = tmp_path / "data.xlsx"
@@ -45,7 +46,7 @@ def test_read_write_round_trip_xlsx(
 
 
 def test_read_xlsx_with_sheet_name(
-    tmp_path, dm: DataManager, sample_df: pl.DataFrame
+    tmp_path: Path, dm: DataManager, sample_df: pl.DataFrame
 ) -> None:
     path = tmp_path / "data.xlsx"
     sample_df.write_excel(path, worksheet="MySheet")
@@ -57,7 +58,7 @@ def test_read_xlsx_with_sheet_name(
 # -------------------------------------------------------------------------
 
 
-def test_read_file_not_found(tmp_path, dm: DataManager) -> None:
+def test_read_file_not_found(tmp_path: Path, dm: DataManager) -> None:
     with pytest.raises(FileNotFoundError, match="File not found"):
         dm.read(tmp_path / "missing.csv")
 
@@ -67,7 +68,9 @@ def test_read_file_not_found(tmp_path, dm: DataManager) -> None:
     ["data.txt", "data.xml", "data.html"],
     ids=["txt", "xml", "html"],
 )
-def test_read_unsupported_format(tmp_path, dm: DataManager, filename: str) -> None:
+def test_read_unsupported_format(
+    tmp_path: Path, dm: DataManager, filename: str
+) -> None:
     path = tmp_path / filename
     path.touch()
     with pytest.raises(ValueError, match="Unsupported read format"):
@@ -78,7 +81,7 @@ def test_read_unsupported_format(tmp_path, dm: DataManager, filename: str) -> No
 # write — behavior
 # -------------------------------------------------------------------------
 def test_write_creates_parent_directories(
-    tmp_path, dm: DataManager, sample_df: pl.DataFrame
+    tmp_path: Path, dm: DataManager, sample_df: pl.DataFrame
 ) -> None:
     path = tmp_path / "nested" / "deep" / "data.csv"
     dm.write(sample_df, path)
@@ -86,7 +89,7 @@ def test_write_creates_parent_directories(
 
 
 def test_write_overwrite_true_replaces_file(
-    tmp_path, dm: DataManager, sample_df: pl.DataFrame
+    tmp_path: Path, dm: DataManager, sample_df: pl.DataFrame
 ) -> None:
     path = tmp_path / "data.csv"
     dm.write(sample_df, path)
@@ -96,7 +99,10 @@ def test_write_overwrite_true_replaces_file(
 
 
 def test_write_overwrite_logs_warning(
-    tmp_path, dm: DataManager, sample_df: pl.DataFrame, caplog
+    tmp_path: Path,
+    dm: DataManager,
+    sample_df: pl.DataFrame,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     path = tmp_path / "data.csv"
     dm.write(sample_df, path)
@@ -116,14 +122,14 @@ def test_write_overwrite_logs_warning(
     ids=["txt", "xml", "html"],
 )
 def test_write_unsupported_format(
-    tmp_path, dm: DataManager, sample_df: pl.DataFrame, filename: str
+    tmp_path: Path, dm: DataManager, sample_df: pl.DataFrame, filename: str
 ) -> None:
     with pytest.raises(ValueError, match="Unsupported write format"):
         dm.write(sample_df, tmp_path / filename)
 
 
 def test_write_overwrite_false_raises_if_file_exists(
-    tmp_path, dm: DataManager, sample_df: pl.DataFrame
+    tmp_path: Path, dm: DataManager, sample_df: pl.DataFrame
 ) -> None:
     path = tmp_path / "data.csv"
     dm.write(sample_df, path)
