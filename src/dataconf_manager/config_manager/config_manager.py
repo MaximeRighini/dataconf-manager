@@ -1,3 +1,32 @@
+"""
+ConfigManager: merge multi-layer YAML configs into a single flat config.
+
+The config directory is structured in layers. Each layer is a subdirectory
+containing one or more YAML files at arbitrary depth. Layers are discovered,
+merged in priority order, and anchor points resolved before the config
+is exposed via a simple dot-notation API.
+
+Design principles
+-----------------
+- YAML over Python. Config files can be edited without touching the codebase
+  and are safe to hand to non-developers. Python config files can execute
+  arbitrary code on import, which is a security risk in production.
+- Priority order as explicit contract. The developer defines the merge order
+  at instantiation time. Later layers override earlier ones. Nothing is implicit.
+- Deep merge, not shallow replace. A prod layer that only defines log_level
+  does not erase the other keys inherited from general.
+- Fail fast on unresolvable anchors. {anchor} placeholders that cannot be
+  resolved from context kwargs raise a KeyError immediately, rather than
+  propagating silently into the pipeline as literal strings.
+- Context-driven folder resolution. If a layer name matches a context key
+  (e.g. layer "market" + context market="FR"), the manager descends into
+  the matching subdirectory automatically.
+
+TODO @Maxime 2026-05-21: extend to support remote config sources
+(e.g. AWS SSM, GCP Secret Manager) by abstracting file discovery
+behind a ConfigBackend interface.
+"""
+
 import logging
 from pathlib import Path
 from typing import Any
@@ -23,11 +52,12 @@ class ConfigManager:
     - Environment safety: Python config files can execute arbitrary code on
       import, which is a security risk in production environments.
 
-    Config layers are merged in the order defined by `priority_order`
+    Config layers are merged in the order defined by priority_order
     (lowest to highest priority). Each layer overrides the previous one
-    via deep merge — sub-dicts are merged at the key level, not replaced.
+    via deep merge -- sub-dicts are merged at the key level, not replaced.
 
-    Example directory structure and priority order:
+    Example directory structure and priority order::
+
         config/
         ├── general/   # base defaults
         ├── market/    # country-specific overrides (e.g. FR/, EN/)
@@ -39,17 +69,18 @@ class ConfigManager:
     from context kwargs. Unresolvable anchors raise a KeyError immediately
     to avoid silent misconfigurations.
 
-    Example:
+    Example::
+
         # Given this config structure:
         #   config/
         #   ├── general/settings.yaml   -> { pipeline: { log_level: INFO } }
         #   ├── market/FR/settings.yaml -> { pipeline: { currency: EUR } }
         #   └── env/prod/settings.yaml  -> { pipeline: { log_level: WARNING } }
         #
-        # After merge (general < market < env):
+        # After merge (general < market/FR < env/prod):
         #   { pipeline: { log_level: WARNING, currency: EUR } }
         #
-        # env/prod overrides log_level from general,
+        # env/prod overrides log_level from general.
         # market/FR adds currency without erasing log_level.
 
         cm = ConfigManager(
@@ -74,14 +105,18 @@ class ConfigManager:
         **context: str,
     ) -> None:
         """
-        Args:
-            config_dir: Root config directory.
-            priority_order: Ordered list of config layer subdirectory names.
-                Later entries override earlier ones.
-                Defaults to ["general", "market", "env"].
-            **context: Runtime values for anchor replacement and folder
-                resolution. Keys must match anchor points used in YAML values.
-                e.g. env="prod", market="FR"
+        Parameters
+        ----------
+        config_dir:
+            Root config directory.
+        priority_order:
+            Ordered list of config layer subdirectory names.
+            Later entries override earlier ones.
+            Defaults to ["general", "market", "env"].
+        **context:
+            Runtime values for anchor replacement and folder resolution.
+            Keys must match anchor points used in YAML values.
+            e.g. env="prod", market="FR"
         """
         self._config_dir = Path(config_dir)
         self._priority_order = priority_order
@@ -96,9 +131,12 @@ class ConfigManager:
         """
         Returns a config value using dot-notation key traversal.
 
-        Args:
-            key: Dot-separated key path, e.g. "database.host".
-            default: Value returned if the key is absent.
+        Parameters
+        ----------
+        key:
+            Dot-separated key path, e.g. "database.host".
+        default:
+            Value returned if the key is absent. Defaults to None.
         """
         keys = key.split(".")
         value = self._config
@@ -113,17 +151,21 @@ class ConfigManager:
     # -------------------------------------------------------------------------
 
     def _build_config(self) -> dict[str, Any]:
+        """
+        Discovers all config layers in priority order, merges them, and
+        resolves anchor points. Called once at instantiation.
+        """
         merged: dict[str, Any] = {}
         for layer in self._priority_order:
             layer_dir = self._config_dir / layer
 
-            # If context has a matching key, go one level deeper.
+            # If context has a matching key, descend one level deeper.
             # e.g. market/ -> market/FR/ if context has market="FR"
             if layer in self._context:
                 layer_dir = layer_dir / self._context[layer]
 
             if not layer_dir.exists():
-                logger.debug(f"Config layer '{layer}' not found — skipping.")
+                logger.debug(f"Config layer '{layer}' not found -- skipping.")
                 continue
 
             layer_config = self._load_layer(layer_dir)
@@ -135,6 +177,9 @@ class ConfigManager:
     def _load_layer(self, layer_dir: Path) -> dict[str, Any]:
         """
         Recursively reads and merges all YAML files in a layer directory.
+
+        Files are processed in sorted order to ensure deterministic merge
+        behavior when multiple files exist in the same layer.
         """
         merged: dict[str, Any] = {}
         for yaml_file in sorted(layer_dir.rglob("*")):
@@ -150,8 +195,8 @@ class ConfigManager:
         """
         Recursively resolves {anchor} placeholders in all string values.
 
-        Raises KeyError if an anchor cannot be resolved from context —
-        fails fast to avoid silent misconfigurations.
+        Raises KeyError if an anchor cannot be resolved from context --
+        fails fast to avoid silent misconfigurations downstream.
         """
         resolved: dict[str, Any] = {}
         for key, value in config.items():
@@ -179,8 +224,8 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     """
     Recursively merges override into base.
 
-    Nested dicts are merged at the key level — override does not
-    erase entire sub-dicts, only the keys it explicitly defines.
+    Nested dicts are merged at the key level -- override does not erase
+    entire sub-dicts, only the keys it explicitly defines.
     """
     merged = base.copy()
     for key, value in override.items():
