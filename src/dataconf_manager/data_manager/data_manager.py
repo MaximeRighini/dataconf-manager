@@ -102,7 +102,9 @@ class DataManager:
             case _:
                 raise ValueError(f"Unsupported read format: '{ext}'")
 
-    def write(self, df: pl.DataFrame, path: str | Path, overwrite: bool = True) -> None:
+    def write(
+        self, df: pl.DataFrame, path: str | Path, overwrite: bool = True, **kwargs: Any
+    ) -> None:
         """
         Writes a Polars DataFrame to disk.
 
