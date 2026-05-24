@@ -101,6 +101,17 @@ cm.get("pipeline.timeout", 30)     # -> 30           (absent — returns default
 cm.get("database.host")            # -> "prod-FR-db.internal.com" (resolved from "prod-{market}-db.internal.com")
 ```
 
+**Two access styles are supported:**
+
+```python
+# .get() — returns default if absent, useful for optional config keys
+cm.get("pipeline.timeout", 60)
+
+# Attribute-style — fail-fast, raises AttributeError if key is missing
+cm.data.df_product
+cm.lca.emission_factors_kg_co2_per_kg_km.sea
+```
+
 **Example directory structure** (adapt to your `priority_order`):
 
 ```text

@@ -21,6 +21,9 @@ Design principles
 - Context-driven folder resolution. If a layer name matches a context key
   (e.g. layer "market" + context market="FR"), the manager descends into
   the matching subdirectory automatically.
+- Attribute-style access. Config values can be accessed via dot notation
+  (config.data.df_product) in addition to the .get() API. Attribute access
+  raises AttributeError on missing keys (fail-fast); .get() returns a default.
 
 TODO @Maxime 2026-05-21: extend to support remote config sources
 (e.g. AWS SSM, GCP Secret Manager) by abstracting file discovery
@@ -42,6 +45,38 @@ _SUPPORTED_CONFIG_FORMATS: frozenset[str] = frozenset({".yaml", ".yml"})
 _DEFAULT_PRIORITY_ORDER: list[str] = ["general", "market", "env"]
 
 
+class _ConfigView:
+    """
+    Read-only wrapper enabling attribute-style access over a config sub-dict.
+
+    Returned automatically by ConfigManager.__getattr__ when the accessed key
+    maps to a nested dict. Raises AttributeError on missing keys (fail-fast).
+
+    Example::
+
+        config.lca.emission_factors_kg_co2_per_kg_km.sea  # -> 0.000032
+        config.data.df_product                             # -> "data/output/FR/..."
+    """
+
+    def __init__(self, data: dict[str, Any]) -> None:
+        object.__setattr__(self, "_data", data)
+
+    def __getattr__(self, key: str) -> Any:
+        data = object.__getattribute__(self, "_data")
+        if key not in data:
+            raise AttributeError(
+                f"Config key '{key}' not found. Available keys: {list(data.keys())}"
+            )
+        value = data[key]
+        if isinstance(value, dict):
+            return _ConfigView(value)
+        return value
+
+    def __repr__(self) -> str:
+        data = object.__getattribute__(self, "_data")
+        return f"ConfigView({data})"
+
+
 class ConfigManager:
     """
     Reads and merges YAML configuration files from a structured config directory.
@@ -56,6 +91,18 @@ class ConfigManager:
     (lowest to highest priority). Each layer overrides the previous one
     via deep merge -- sub-dicts are merged at the key level, not replaced.
 
+    Two access styles are supported:
+
+    - Attribute-style (fail-fast, no default)::
+
+        config.data.df_product
+        config.lca.emission_factors_kg_co2_per_kg_km.sea
+
+    - .get() style (returns default if absent)::
+
+        config.get("pipeline.timeout", 60)
+        config.get("data.df_product")
+
     Example directory structure and priority order::
 
         config/
@@ -65,23 +112,7 @@ class ConfigManager:
 
         priority_order = ["general", "market", "env"]
 
-    Anchor points (e.g. {env}, {market}) in YAML string values are resolved
-    from context kwargs. Unresolvable anchors raise a KeyError immediately
-    to avoid silent misconfigurations.
-
     Example::
-
-        # Given this config structure:
-        #   config/
-        #   ├── general/settings.yaml   -> { pipeline: { log_level: INFO } }
-        #   ├── market/FR/settings.yaml -> { pipeline: { currency: EUR } }
-        #   └── env/prod/settings.yaml  -> { pipeline: { log_level: WARNING } }
-        #
-        # After merge (general < market/FR < env/prod):
-        #   { pipeline: { log_level: WARNING, currency: EUR } }
-        #
-        # env/prod overrides log_level from general.
-        # market/FR adds currency without erasing log_level.
 
         cm = ConfigManager(
             "config/",
@@ -90,8 +121,9 @@ class ConfigManager:
             market="FR",
         )
         cm.get("pipeline.log_level")       # -> "WARNING"  (overridden by env/prod)
-        cm.get("pipeline.currency")        # -> "EUR"      (added by market/FR)
-        cm.get("pipeline.timeout", 30)     # -> 30         (absent, returns default)
+        cm.data.df_product                 # -> "data/output/FR/df_product.parquet"
+        cm.lca.emission_factors_kg_co2_per_kg_km.sea  # -> 0.000032
+        cm.get("pipeline.timeout", 30)     # -> 30 (absent, returns default)
 
     TODO @Maxime 2026-05-21: extend to support remote config sources
     (e.g. AWS SSM, GCP Secret Manager) by abstracting file discovery
@@ -131,6 +163,9 @@ class ConfigManager:
         """
         Returns a config value using dot-notation key traversal.
 
+        Returns default if the key is absent. Use attribute-style access
+        (config.data.df_product) for fail-fast behavior instead.
+
         Parameters
         ----------
         key:
@@ -144,6 +179,27 @@ class ConfigManager:
             if not isinstance(value, dict) or k not in value:
                 return default
             value = value[k]
+        return value
+
+    def __getattr__(self, key: str) -> Any:
+        """
+        Enables attribute-style access to top-level config keys.
+
+        Returns a _ConfigView for nested dicts, or the raw value for scalars.
+        Raises AttributeError if the key is not found -- use .get() for optional keys.
+        """
+        # Guard against infinite recursion during __init__ before _config is set
+        if key.startswith("_"):
+            raise AttributeError(key)
+        config = object.__getattribute__(self, "_config")
+        if key not in config:
+            raise AttributeError(
+                f"Config key '{key}' not found."
+                f"Available top-level keys: {list(config.keys())}"
+            )
+        value = config[key]
+        if isinstance(value, dict):
+            return _ConfigView(value)
         return value
 
     # -------------------------------------------------------------------------
