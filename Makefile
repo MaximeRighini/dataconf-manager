@@ -8,8 +8,6 @@ help:
 	@echo "  make test         - Run unit tests"
 	@echo "  make all          - Fix, verify, and test"
 	@echo "  make clean        - Clean cache and temporary files"
-	@echo "  make docs-serve   - Preview the documentation locally"
-	@echo "  make docs-deploy  - Deploy the documentation to GitHub Pages"
 
 setup:
 	@echo "Upgrading pip..."
@@ -41,9 +39,3 @@ clean:
 	rm -rf .pytest_cache .mypy_cache .ruff_cache htmlcov .coverage
 	find . -name "__pycache__" -exec rm -rf {} +
 	@echo "Environment cleaned."
-
-docs-serve:
-	mkdocs serve
-
-docs-deploy:
-	mkdocs gh-deploy

@@ -20,4 +20,4 @@ venv/
 
 # Pytest coverage reports
 htmlcov/
-.coverage
+.coverage*
